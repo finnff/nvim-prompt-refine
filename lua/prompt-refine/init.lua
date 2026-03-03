@@ -5,12 +5,18 @@
 
 local M = {}
 
+---Get the plugin's root directory
+local function plugin_root()
+    local source = debug.getinfo(1, "S").source:sub(2)
+    return vim.fn.fnamemodify(source, ":h:h:h:h")
+end
+
 ---Default configuration
 ---@type PromptRefineConfig
 local defaults = {
     cli_cmd = "gemini",
-    meta_prompt_path = vim.fn.expand("~/.config/prompt-refine/meta.txt"),
-    meta_prompt_teams_path = vim.fn.expand("~/.config/prompt-refine/teams.txt"),
+    meta_prompt_path = plugin_root() .. "/meta-prompts/default.txt",
+    meta_prompt_teams_path = plugin_root() .. "/meta-prompts/teams.txt",
 }
 
 ---Current configuration (merged with defaults)
