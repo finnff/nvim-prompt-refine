@@ -145,11 +145,11 @@ local function refine_prompt(meta_prompt_path)
         cwd = safe_dir,
     }, function(result)
         done = true
-        -- Clean up temp directory
-        if safe_dir then
-            vim.fn.delete(safe_dir, "rf")
-        end
         vim.schedule(function()
+            -- Clean up temp directory
+            if safe_dir then
+                vim.fn.delete(safe_dir, "rf")
+            end
             local elapsed = vim.loop.now() - start_time
             if result.code ~= 0 then
                 vim.notify(string.format("PromptRefine: CLI failed (code %d) after %dms\nstderr: %s",
