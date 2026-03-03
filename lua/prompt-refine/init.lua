@@ -19,7 +19,7 @@ end
 ---@type PromptRefineConfig
 local defaults = {
     cli_cmd = { "gemini", "-o", "text" },
-    use_stdin = true,
+    use_stdin = false,  -- gemini needs prompt as positional argument per official docs
     meta_prompt_path = plugin_root() .. "/meta-prompts/default.txt",
     meta_prompt_teams_path = plugin_root() .. "/meta-prompts/teams.txt",
     timeout = 60000,  -- 60 seconds

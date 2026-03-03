@@ -39,9 +39,10 @@ require("prompt-refine").setup({
     -- The CLI command and arguments (array format)
     cli_cmd = { "gemini", "-o", "text" },
 
-    -- Whether to pass input via stdin (default: true)
-    -- Set to false for CLIs that use command-line arguments (e.g., claude -p "...")
-    use_stdin = true,
+    -- Whether to pass input via stdin (default: false)
+    -- Set to true for CLIs that read from stdin (e.g., codex, custom tools)
+    -- Set to false for CLIs that use positional arguments (e.g., gemini, claude)
+    use_stdin = false,
 
     -- Request timeout in milliseconds (default: 60000 = 60 seconds)
     timeout = 60000,
@@ -60,30 +61,30 @@ require("prompt-refine").setup({
 
 ### CLI Configuration Examples
 
-**Gemini** (recommended):
+**Gemini** (recommended/default):
 ```lua
 cli_cmd = { "gemini", "-o", "text" }
-use_stdin = true
-safe_cwd = true  -- Important: prevents gemini from scanning your working directory
+use_stdin = false  -- Per official docs, gemini needs prompt as positional argument
+safe_cwd = true   -- Prevents workspace scanning timeouts
 ```
-> **Note**: The `gemini` CLI scans the current directory for context, which can cause timeouts and permission warnings in directories like `/tmp`. Set `safe_cwd = true` (default) to run from a safe location.
+> **Note**: Per official [gemini-cli automation docs](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/tutorials/automation.md), the pattern is `cat file | gemini "prompt"` where stdin is optional context and the positional argument is the prompt. Our plugin passes the entire input as the prompt, so `use_stdin = false` is correct.
 
-**Claude Code** (doesn't read stdin):
+**Claude Code**:
 ```lua
 cli_cmd = { "claude", "-p" }
-use_stdin = false  -- Claude requires prompt as argument
+use_stdin = false  -- Query becomes positional argument after -p
 ```
 
-**OpenAI Codex**:
+**OpenAI Codex** (stdin-based):
 ```lua
 cli_cmd = { "codex", "exec", "-", "--skip-git-repo-check" }
-use_stdin = true
+use_stdin = true   -- Must override default for stdin-based CLIs
 ```
 
-**Custom with flags**:
+**Custom stdin-based CLI**:
 ```lua
 cli_cmd = { "llm", "run", "--model", "gpt-4" }
-use_stdin = true
+use_stdin = true   -- Must override default for stdin-based CLIs
 ```
 
 ### Backward Compatibility
