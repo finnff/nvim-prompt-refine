@@ -8,7 +8,8 @@ local M = {}
 ---Get the plugin's root directory
 local function plugin_root()
     local source = debug.getinfo(1, "S").source:sub(2)
-    return vim.fn.fnamemodify(source, ":h:h:h:h")
+    -- From lua/prompt-refine/init.lua, go up 3 levels to reach plugin root
+    return vim.fn.fnamemodify(source, ":h:h:h")
 end
 
 ---Default configuration
