@@ -23,7 +23,7 @@ local defaults = {
     meta_prompt_path = plugin_root() .. "/meta-prompts/default.txt",
     meta_prompt_teams_path = plugin_root() .. "/meta-prompts/teams.txt",
     timeout = 60000,  -- 60 seconds
-    safe_cwd = true,  -- Change to safe dir to avoid workspace scanning issues
+    safe_cwd = true,  -- Only applies when use_stdin=true; prevents workspace scanning
 }
 
 ---Current configuration (merged with defaults)
@@ -122,19 +122,20 @@ local function refine_prompt(meta_prompt_path)
     local start_time = vim.loop.now()
 
     -- Build the actual command to run
-    -- If safe_cwd is enabled, wrap in shell to change to a safe directory first
-    -- This prevents CLIs like gemini from scanning the current working directory
+    -- If safe_cwd is enabled AND using stdin, wrap in shell to change to a safe directory first
+    -- This prevents CLIs from scanning the current working directory
+    -- NOTE: safe_cwd only works with use_stdin=true; it breaks positional arguments due to shell parsing
     local final_cmd = cmd_args
     local final_stdin = config.use_stdin and combined_input or nil
 
-    if config.safe_cwd then
+    if config.safe_cwd and config.use_stdin then
         -- Escape shell special characters in the command
         local function escape_shell(arg)
             return "'" .. arg:gsub("'", "'\\''") .. "'"
         end
 
         local cmd_escaped = table.concat(vim.tbl_map(escape_shell, cmd_args), " ")
-        -- Use sh -c to change to a safe directory (/dev/null is just a placeholder, we redirect stdin)
+        -- Use sh -c to change to a safe directory first
         final_cmd = { "sh", "-c", "cd / && " .. cmd_escaped }
     end
 

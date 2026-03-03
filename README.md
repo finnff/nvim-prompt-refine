@@ -53,7 +53,7 @@ require("prompt-refine").setup({
     -- meta_prompt_teams_path = "~/.config/prompt-refine/teams.txt",
 
     -- Change to safe directory before running CLI (default: true)
-    -- Prevents workspace scanning by CLIs like gemini that can cause timeouts
+    -- Only applies when use_stdin=true; prevents workspace scanning issues
     -- Set to false if your CLI needs access to the current working directory
     safe_cwd = true,
 })
@@ -65,9 +65,8 @@ require("prompt-refine").setup({
 ```lua
 cli_cmd = { "gemini", "-o", "text" }
 use_stdin = false  -- Per official docs, gemini needs prompt as positional argument
-safe_cwd = true   -- Prevents workspace scanning timeouts
 ```
-> **Note**: Per official [gemini-cli automation docs](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/tutorials/automation.md), the pattern is `cat file | gemini "prompt"` where stdin is optional context and the positional argument is the prompt. Our plugin passes the entire input as the prompt, so `use_stdin = false` is correct.
+> **Note**: Per official [gemini-cli automation docs](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/tutorials/automation.md), the pattern is `cat file | gemini "prompt"` where stdin is optional context and the positional argument is the prompt. Our plugin passes the entire input as the prompt, so `use_stdin = false` is correct. Note: `safe_cwd` does not apply when `use_stdin=false`.
 
 **Claude Code**:
 ```lua
@@ -79,6 +78,7 @@ use_stdin = false  -- Query becomes positional argument after -p
 ```lua
 cli_cmd = { "codex", "exec", "-", "--skip-git-repo-check" }
 use_stdin = true   -- Must override default for stdin-based CLIs
+safe_cwd = true    -- Optional: prevents workspace scanning (only works with use_stdin=true)
 ```
 
 **Custom stdin-based CLI**:
