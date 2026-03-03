@@ -56,8 +56,8 @@ require("prompt-refine").setup({
     -- meta_prompt_path = "~/.config/prompt-refine/meta.txt",
     -- meta_prompt_teams_path = "~/.config/prompt-refine/teams.txt",
 
-    -- Change to safe directory before running CLI (default: true)
-    -- Only applies when use_stdin=true; prevents workspace scanning issues
+    -- Run CLI in an empty temp directory (default: true)
+    -- Prevents CLIs like Gemini from scanning the workspace on startup
     -- Set to false if your CLI needs access to the current working directory
     safe_cwd = true,
 })
@@ -71,7 +71,7 @@ cli_cmd = { "gemini", "-o", "text", "-p" }
 use_stdin = false
 -- model = "gemini-2.5-pro"  -- optional
 ```
-> **Note**: The `-p` flag is required for headless (non-interactive) mode. Without it, Gemini launches in interactive mode and hangs. See [gemini-cli headless docs](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/headless.md).
+> **Note**: The `-p` flag is required for headless (non-interactive) mode. Without it, Gemini launches in interactive mode and hangs. `safe_cwd = true` (default) prevents Gemini from scanning the workspace on startup.
 
 **Claude Code**:
 ```lua
@@ -84,7 +84,7 @@ use_stdin = false
 ```lua
 cli_cmd = { "codex", "exec", "-", "--skip-git-repo-check" }
 use_stdin = true   -- Must override default for stdin-based CLIs
-safe_cwd = true    -- Optional: prevents workspace scanning (only works with use_stdin=true)
+safe_cwd = true    -- Prevents workspace scanning
 ```
 
 **Custom stdin-based CLI**:

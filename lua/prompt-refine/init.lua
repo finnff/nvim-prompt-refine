@@ -5,7 +5,7 @@
 ---@field meta_prompt_path? string Path to the standard meta prompt file
 ---@field meta_prompt_teams_path? string Path to the teams meta prompt file
 ---@field timeout? integer Timeout in milliseconds (default: 60000 = 60 seconds)
----@field safe_cwd? boolean Change to a safe temporary directory before running CLI to avoid workspace scanning (default: true)
+---@field safe_cwd? boolean Run CLI in an empty temp directory to prevent workspace scanning (default: true)
 
 local M = {}
 
@@ -25,7 +25,7 @@ local defaults = {
     meta_prompt_path = plugin_root() .. "/meta-prompts/default.txt",
     meta_prompt_teams_path = plugin_root() .. "/meta-prompts/teams.txt",
     timeout = 60000,  -- 60 seconds
-    safe_cwd = true,  -- Only applies when use_stdin=true; prevents workspace scanning
+    safe_cwd = true,  -- Run CLI in empty temp dir to prevent workspace scanning
 }
 
 ---Current configuration (merged with defaults)
@@ -129,30 +129,26 @@ local function refine_prompt(meta_prompt_path)
     local done = false
     local start_time = vim.loop.now()
 
-    -- Build the actual command to run
-    -- If safe_cwd is enabled AND using stdin, wrap in shell to change to a safe directory first
-    -- This prevents CLIs from scanning the current working directory
-    -- NOTE: safe_cwd only works with use_stdin=true; it breaks positional arguments due to shell parsing
-    local final_cmd = cmd_args
+    -- Determine cwd: use an empty temp directory if safe_cwd is enabled
+    -- This prevents CLIs like Gemini from scanning the workspace directory on startup
     local final_stdin = config.use_stdin and combined_input or nil
-
-    if config.safe_cwd and config.use_stdin then
-        -- Escape shell special characters in the command
-        local function escape_shell(arg)
-            return "'" .. arg:gsub("'", "'\\''") .. "'"
-        end
-
-        local cmd_escaped = table.concat(vim.tbl_map(escape_shell, cmd_args), " ")
-        -- Use sh -c to change to a safe directory first
-        final_cmd = { "sh", "-c", "cd / && " .. cmd_escaped }
+    local safe_dir = nil
+    if config.safe_cwd then
+        safe_dir = vim.fn.tempname() .. "_promptrefine"
+        vim.fn.mkdir(safe_dir, "p")
     end
 
     -- Run CLI asynchronously
-    local handle = vim.system(final_cmd, {
+    local handle = vim.system(cmd_args, {
         stdin = final_stdin,
         text = true,
+        cwd = safe_dir,
     }, function(result)
         done = true
+        -- Clean up temp directory
+        if safe_dir then
+            vim.fn.delete(safe_dir, "rf")
+        end
         vim.schedule(function()
             local elapsed = vim.loop.now() - start_time
             if result.code ~= 0 then
