@@ -78,7 +78,7 @@ local function refine_prompt(meta_prompt_path)
     vim.notify("PromptRefine: Processing...", vim.log.levels.INFO)
 
     -- Run CLI asynchronously
-    vim.system(config.cli_cmd, {
+    vim.system({ config.cli_cmd }, {
         stdin = combined_input,
         text = true,
     }, function(result)
