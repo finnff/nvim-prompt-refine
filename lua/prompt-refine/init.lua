@@ -1,5 +1,6 @@
 ---@class PromptRefineConfig
----@field cli_cmd? string The CLI executable to call
+---@field cli_cmd string[] The CLI command and arguments (e.g., { "gemini", "--quiet" })
+---@field use_stdin? boolean Whether to pass input via stdin (default: true). Set false for CLIs like Claude that use -p flag
 ---@field meta_prompt_path? string Path to the standard meta prompt file
 ---@field meta_prompt_teams_path? string Path to the teams meta prompt file
 ---@field timeout? integer Timeout in milliseconds (default: 60000 = 60 seconds)
@@ -16,7 +17,8 @@ end
 ---Default configuration
 ---@type PromptRefineConfig
 local defaults = {
-    cli_cmd = "gemini",
+    cli_cmd = { "gemini", "--quiet" },
+    use_stdin = true,
     meta_prompt_path = plugin_root() .. "/meta-prompts/default.txt",
     meta_prompt_teams_path = plugin_root() .. "/meta-prompts/teams.txt",
     timeout = 60000,  -- 60 seconds
@@ -26,19 +28,40 @@ local defaults = {
 ---@type PromptRefineConfig
 local config = vim.deepcopy(defaults)
 
----Strip markdown code block wrappers from LLM output
----Handles ```markdown ... ```, ``` ... ```, and variations with optional language tags
+---Extract content from markdown code blocks
+---Handles LLM output that may have conversational text around the code block
+---Returns content between first ``` and last ```
 ---@param output string The raw output from the CLI
----@return string The sanitized output without markdown code blocks
+---@return string The content extracted from code blocks, or original if no blocks found
 local function strip_markdown_blocks(output)
-    -- Strip leading ```markdown or ```... and trailing ```
-    -- Match ``` followed by optional language identifier, then capture everything until closing ```
-    local stripped = output:gsub("^```%w*%s*\n", ""):gsub("\n```$", "")
-    -- Handle case where there's no newline after opening backticks
-    stripped = stripped:gsub("^```%w*%s*", "")
-    -- Handle case where there's no newline before closing backticks
-    stripped = stripped:gsub("```$", "")
-    return stripped
+    -- Find first opening ```
+    local first_tick = output:find("```")
+    if not first_tick then
+        return output  -- No code block found, return as-is
+    end
+
+    -- Find the newline after the opening ``` (skip language identifier like ```markdown)
+    local content_start = output:find("\n", first_tick)
+    if not content_start then
+        return output  -- Malformed, no newline after opening ```
+    end
+    content_start = content_start + 1  -- Skip the newline to get actual content
+
+    -- Find closing ``` after the content start
+    local last_tick = output:find("```", content_start)
+    if not last_tick then
+        return output  -- Unclosed code block, return as-is
+    end
+
+    -- Extract content between backticks
+    local content_end = last_tick - 1
+
+    -- Handle potential trailing newline before closing ```
+    if content_end >= content_start and output:sub(content_end, content_end) == "\n" then
+        content_end = content_end - 1
+    end
+
+    return output:sub(content_start, content_end)
 end
 
 ---Read file content as a string
@@ -57,11 +80,14 @@ end
 ---Refine the current buffer using the specified meta prompt
 ---@param meta_prompt_path string Path to the meta prompt file to use
 local function refine_prompt(meta_prompt_path)
+    -- CRITICAL: Capture actual buffer number BEFORE async call
+    -- This prevents modifying the wrong buffer if user switches files
+    local bufnr = vim.api.nvim_get_current_buf()
+
     -- Save current file first
     vim.cmd("write")
 
     -- Get current buffer content
-    local bufnr = 0
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     local buffer_content = table.concat(lines, "\n")
 
@@ -78,14 +104,27 @@ local function refine_prompt(meta_prompt_path)
 
     -- Show detailed notification about what's happening
     local input_size = #combined_input
-    vim.notify(string.format("PromptRefine: Calling '%s' with %d bytes of input...", config.cli_cmd, input_size), vim.log.levels.INFO)
+    local cmd_str = table.concat(config.cli_cmd, " ")
+    vim.notify(string.format("PromptRefine: Calling '%s' with %d bytes of input...", cmd_str, input_size), vim.log.levels.INFO)
+
+    -- Build the command arguments
+    local cmd_args = vim.deepcopy(config.cli_cmd)
+
+    -- For CLIs that don't read stdin (like Claude), append input as argument
+    if not config.use_stdin then
+        table.insert(cmd_args, combined_input)
+    end
+
+    -- Track completion for timeout handling
+    local done = false
+    local start_time = vim.loop.now()
 
     -- Run CLI asynchronously
-    local start_time = vim.loop.now()
-    local handle = vim.system({ config.cli_cmd }, {
-        stdin = combined_input,
+    local handle = vim.system(cmd_args, {
+        stdin = config.use_stdin and combined_input or nil,
         text = true,
     }, function(result)
+        done = true
         vim.schedule(function()
             local elapsed = vim.loop.now() - start_time
             if result.code ~= 0 then
@@ -103,6 +142,12 @@ local function refine_prompt(meta_prompt_path)
             -- Split into lines
             local new_lines = vim.split(refined_content, "\n", { trimempty = false })
 
+            -- Verify buffer still exists and is valid before modifying
+            if not vim.api.nvim_buf_is_valid(bufnr) then
+                vim.notify("PromptRefine: Original buffer no longer exists", vim.log.levels.WARN)
+                return
+            end
+
             -- Replace entire buffer content
             vim.api.nvim_buf_set_lines(bufnr, 0, -1, true, new_lines)
 
@@ -116,22 +161,28 @@ local function refine_prompt(meta_prompt_path)
     -- Set up timeout to kill the process if it takes too long
     local timer = vim.loop.new_timer()
     timer:start(config.timeout, 0, function()
-        if handle:is_killed() then
-            return
+        if not done then
+            handle:kill(9)  -- SIGKILL
+            timer:close()
+            vim.schedule(function()
+                local elapsed = vim.loop.now() - start_time
+                vim.notify(string.format("PromptRefine: Timeout after %dms (limit: %dms). CLI process killed.",
+                    elapsed, config.timeout), vim.log.levels.ERROR)
+            end)
+        else
+            timer:close()
         end
-        handle:kill(9)  -- SIGKILL
-        timer:close()
-        vim.schedule(function()
-            local elapsed = vim.loop.now() - start_time
-            vim.notify(string.format("PromptRefine: Timeout after %dms (limit: %dms). CLI process killed.",
-                elapsed, config.timeout), vim.log.levels.ERROR)
-        end)
     end)
 end
 
 ---Setup the plugin with user configuration
 ---@param opts? PromptRefineConfig Optional user configuration
 function M.setup(opts)
+    -- Auto-convert string cli_cmd to table for backward compatibility
+    if opts and opts.cli_cmd and type(opts.cli_cmd) == "string" then
+        opts.cli_cmd = { opts.cli_cmd }
+    end
+
     config = vim.tbl_deep_extend("force", defaults, opts or {})
 
     -- Validate config paths exist (warn but don't error)

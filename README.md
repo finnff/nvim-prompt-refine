@@ -6,9 +6,10 @@ A Neovim plugin that sends the current buffer to a local LLM CLI tool for prompt
 
 - **Asynchronous execution** - Neovim stays responsive while the LLM processes
 - **Two refinement modes** - Standard and Agent Teams
-- **Markdown sanitization** - Automatically strips ```code block``` wrappers from LLM output
-- **Configurable CLI** - Works with any local LLM tool (gemini, claude, codex, etc.)
+- **Markdown sanitization** - Automatically extracts content from ```code blocks``` even with conversational output
+- **Configurable CLI** - Works with stdin-based CLIs (gemini, codex) and argument-based CLIs (claude)
 - **File path preservation** - Keeps `@path/to/file` references intact
+- **Timeout protection** - Kills hanging processes after 60 seconds (configurable)
 
 ## Installation
 
@@ -19,9 +20,7 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
     "finnff/nvim-prompt-refine",
     config = function()
         require("prompt-refine").setup({
-            cli_cmd = "gemini",  -- or "claude", "codex", or your custom CLI
-            meta_prompt_path = "~/.config/prompt-refine/meta.txt",
-            meta_prompt_teams_path = "~/.config/prompt-refine/teams.txt",
+            cli_cmd = { "gemini", "--quiet" },
         })
     end,
 }
@@ -37,15 +36,55 @@ git clone https://github.com/finnff/nvim-prompt-refine ~/.config/nvim/pack/vendo
 
 ```lua
 require("prompt-refine").setup({
-    -- The CLI executable to call
-    cli_cmd = "gemini",
+    -- The CLI command and arguments (array format)
+    cli_cmd = { "gemini", "--quiet" },
 
-    -- Path to standard meta prompt
-    meta_prompt_path = "~/.config/prompt-refine/meta.txt",
+    -- Whether to pass input via stdin (default: true)
+    -- Set to false for CLIs that use command-line arguments (e.g., claude -p "...")
+    use_stdin = true,
 
-    -- Path to agent teams meta prompt
-    meta_prompt_teams_path = "~/.config/prompt-refine/teams.txt",
+    -- Request timeout in milliseconds (default: 60000 = 60 seconds)
+    timeout = 60000,
+
+    -- Optional: Custom paths to meta prompt files
+    -- Defaults to built-in meta-prompts if not specified
+    -- meta_prompt_path = "~/.config/prompt-refine/meta.txt",
+    -- meta_prompt_teams_path = "~/.config/prompt-refine/teams.txt",
 })
+```
+
+### CLI Configuration Examples
+
+**Gemini** (recommended):
+```lua
+cli_cmd = { "gemini", "--quiet" }
+use_stdin = true
+```
+
+**Claude Code** (doesn't read stdin):
+```lua
+cli_cmd = { "claude", "-p" }
+use_stdin = false  -- Claude requires prompt as argument
+```
+
+**OpenAI Codex**:
+```lua
+cli_cmd = { "codex", "exec", "-" }
+use_stdin = true
+```
+
+**Custom with flags**:
+```lua
+cli_cmd = { "llm", "run", "--model", "gpt-4", "--quiet" }
+use_stdin = true
+```
+
+### Backward Compatibility
+
+Old string-style `cli_cmd` still works:
+```lua
+-- This is automatically converted to { "gemini" }
+cli_cmd = "gemini"
 ```
 
 ## Usage
@@ -67,20 +106,21 @@ Then configure in your Neovim:
 
 ```lua
 require("prompt-refine").setup({
-    cli_cmd = "scripts/dummy-cli.sh",
+    cli_cmd = { "scripts/dummy-cli.sh" },
 })
 ```
 
-The dummy script wraps output in markdown blocks to verify the sanitization works correctly.
+The dummy script wraps output in markdown blocks with conversational text to verify the sanitization works correctly.
 
 ## How It Works
 
-1. Saves the current file
-2. Reads buffer content and meta prompt file
-3. Sends combined input to CLI via stdin (avoids shell escaping issues)
-4. Strips markdown code blocks from output
-5. Replaces buffer with refined content
-6. Saves the file again
+1. Captures current buffer number (prevents modifying wrong file if you switch buffers)
+2. Saves the current file
+3. Reads buffer content and meta prompt file
+4. Sends combined input to CLI (via stdin or as argument)
+5. Extracts content from markdown code blocks (handles conversational output)
+6. Replaces buffer with refined content
+7. Saves the file again
 
 ## License
 

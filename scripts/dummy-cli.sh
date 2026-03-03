@@ -1,6 +1,6 @@
 #!/bin/bash
 # Dummy CLI script for testing PromptRefine plugin
-# This mimics an LLM CLI by reading stdin, processing it, and outputting with markdown wrappers
+# This mimics an LLM CLI by reading stdin, processing it, and outputting with conversational text + markdown blocks
 
 # Read all stdin
 INPUT=$(cat)
@@ -19,7 +19,11 @@ Original prompt preserved below for reference:
 
 $PROMPT_CONTENT"
 
-# Output with markdown code block wrapper (this tests the stripping functionality)
+# Output with conversational text AND markdown code block wrapper (this tests the improved stripping functionality)
+echo "Here's your refined prompt:"
+echo ""
 echo '```markdown'
 echo "$REFINED"
 echo '```'
+echo ""
+echo "Let me know if you need any further adjustments!"
