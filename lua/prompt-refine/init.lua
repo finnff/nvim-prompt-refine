@@ -1,6 +1,7 @@
 ---@class PromptRefineConfig
----@field cli_cmd string[] The CLI command and arguments (e.g., { "gemini", "-o", "text" })
+---@field cli_cmd string[] The CLI command and arguments (e.g., { "gemini", "-o", "text", "-p" })
 ---@field use_stdin? boolean Whether to pass input via stdin (default: true). Set false for CLIs like Claude that use -p flag
+---@field model? string Model name to pass via --model flag (e.g., "sonnet", "gemini-2.5-pro")
 ---@field meta_prompt_path? string Path to the standard meta prompt file
 ---@field meta_prompt_teams_path? string Path to the teams meta prompt file
 ---@field timeout? integer Timeout in milliseconds (default: 60000 = 60 seconds)
@@ -18,8 +19,9 @@ end
 ---Default configuration
 ---@type PromptRefineConfig
 local defaults = {
-    cli_cmd = { "gemini", "-o", "text" },
-    use_stdin = false,  -- gemini needs prompt as positional argument per official docs
+    cli_cmd = { "gemini", "-o", "text", "-p" },
+    use_stdin = false,  -- gemini uses -p flag for headless mode; prompt appended as -p's value
+    model = nil,  -- optional: passed as --model <value> to the CLI
     meta_prompt_path = plugin_root() .. "/meta-prompts/default.txt",
     meta_prompt_teams_path = plugin_root() .. "/meta-prompts/teams.txt",
     timeout = 60000,  -- 60 seconds
@@ -111,6 +113,12 @@ local function refine_prompt(meta_prompt_path)
 
     -- Build the command arguments
     local cmd_args = vim.deepcopy(config.cli_cmd)
+
+    -- Inject --model flag if configured
+    if config.model then
+        table.insert(cmd_args, "--model")
+        table.insert(cmd_args, config.model)
+    end
 
     -- For CLIs that don't read stdin (like Claude), append input as argument
     if not config.use_stdin then

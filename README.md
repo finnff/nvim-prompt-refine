@@ -7,7 +7,8 @@ A Neovim plugin that sends the current buffer to a local LLM CLI tool for prompt
 - **Asynchronous execution** - Neovim stays responsive while the LLM processes
 - **Two refinement modes** - Standard and Agent Teams
 - **Markdown sanitization** - Automatically extracts content from ```code blocks``` even with conversational output
-- **Configurable CLI** - Works with stdin-based CLIs (gemini, codex) and argument-based CLIs (claude)
+- **Configurable CLI** - Works with stdin-based CLIs (codex) and argument-based CLIs (gemini, claude)
+- **Model selection** - Set a default model via config without editing `cli_cmd`
 - **File path preservation** - Keeps `@path/to/file` references intact
 - **Timeout protection** - Kills hanging processes after 60 seconds (configurable)
 
@@ -20,7 +21,7 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
     "finnff/nvim-prompt-refine",
     config = function()
         require("prompt-refine").setup({
-            cli_cmd = { "gemini", "-o", "text" },
+            cli_cmd = { "gemini", "-o", "text", "-p" },
         })
     end,
 }
@@ -37,12 +38,15 @@ git clone https://github.com/finnff/nvim-prompt-refine ~/.config/nvim/pack/vendo
 ```lua
 require("prompt-refine").setup({
     -- The CLI command and arguments (array format)
-    cli_cmd = { "gemini", "-o", "text" },
+    cli_cmd = { "gemini", "-o", "text", "-p" },
 
     -- Whether to pass input via stdin (default: false)
     -- Set to true for CLIs that read from stdin (e.g., codex, custom tools)
-    -- Set to false for CLIs that use positional arguments (e.g., gemini, claude)
+    -- Set to false for CLIs that use -p or similar flags (e.g., gemini, claude)
     use_stdin = false,
+
+    -- Model name passed as --model <value> to the CLI (default: nil = use CLI default)
+    -- model = "sonnet",
 
     -- Request timeout in milliseconds (default: 60000 = 60 seconds)
     timeout = 60000,
@@ -63,15 +67,17 @@ require("prompt-refine").setup({
 
 **Gemini** (recommended/default):
 ```lua
-cli_cmd = { "gemini", "-o", "text" }
-use_stdin = false  -- Per official docs, gemini needs prompt as positional argument
+cli_cmd = { "gemini", "-o", "text", "-p" }
+use_stdin = false
+-- model = "gemini-2.5-pro"  -- optional
 ```
-> **Note**: Per official [gemini-cli automation docs](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/tutorials/automation.md), the pattern is `cat file | gemini "prompt"` where stdin is optional context and the positional argument is the prompt. Our plugin passes the entire input as the prompt, so `use_stdin = false` is correct. Note: `safe_cwd` does not apply when `use_stdin=false`.
+> **Note**: The `-p` flag is required for headless (non-interactive) mode. Without it, Gemini launches in interactive mode and hangs. See [gemini-cli headless docs](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/headless.md).
 
 **Claude Code**:
 ```lua
 cli_cmd = { "claude", "-p" }
-use_stdin = false  -- Query becomes positional argument after -p
+use_stdin = false
+-- model = "sonnet"  -- optional: uses --model flag
 ```
 
 **OpenAI Codex** (stdin-based):
