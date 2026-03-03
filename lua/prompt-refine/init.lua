@@ -1,9 +1,10 @@
 ---@class PromptRefineConfig
----@field cli_cmd string[] The CLI command and arguments (e.g., { "gemini", "--quiet" })
+---@field cli_cmd string[] The CLI command and arguments (e.g., { "gemini", "-o", "text" })
 ---@field use_stdin? boolean Whether to pass input via stdin (default: true). Set false for CLIs like Claude that use -p flag
 ---@field meta_prompt_path? string Path to the standard meta prompt file
 ---@field meta_prompt_teams_path? string Path to the teams meta prompt file
 ---@field timeout? integer Timeout in milliseconds (default: 60000 = 60 seconds)
+---@field safe_cwd? boolean Change to a safe temporary directory before running CLI to avoid workspace scanning (default: true)
 
 local M = {}
 
@@ -17,11 +18,12 @@ end
 ---Default configuration
 ---@type PromptRefineConfig
 local defaults = {
-    cli_cmd = { "gemini", "--quiet" },
+    cli_cmd = { "gemini", "-o", "text" },
     use_stdin = true,
     meta_prompt_path = plugin_root() .. "/meta-prompts/default.txt",
     meta_prompt_teams_path = plugin_root() .. "/meta-prompts/teams.txt",
     timeout = 60000,  -- 60 seconds
+    safe_cwd = true,  -- Change to safe dir to avoid workspace scanning issues
 }
 
 ---Current configuration (merged with defaults)
@@ -119,9 +121,26 @@ local function refine_prompt(meta_prompt_path)
     local done = false
     local start_time = vim.loop.now()
 
+    -- Build the actual command to run
+    -- If safe_cwd is enabled, wrap in shell to change to a safe directory first
+    -- This prevents CLIs like gemini from scanning the current working directory
+    local final_cmd = cmd_args
+    local final_stdin = config.use_stdin and combined_input or nil
+
+    if config.safe_cwd then
+        -- Escape shell special characters in the command
+        local function escape_shell(arg)
+            return "'" .. arg:gsub("'", "'\\''") .. "'"
+        end
+
+        local cmd_escaped = table.concat(vim.tbl_map(escape_shell, cmd_args), " ")
+        -- Use sh -c to change to a safe directory (/dev/null is just a placeholder, we redirect stdin)
+        final_cmd = { "sh", "-c", "cd / && " .. cmd_escaped }
+    end
+
     -- Run CLI asynchronously
-    local handle = vim.system(cmd_args, {
-        stdin = config.use_stdin and combined_input or nil,
+    local handle = vim.system(final_cmd, {
+        stdin = final_stdin,
         text = true,
     }, function(result)
         done = true

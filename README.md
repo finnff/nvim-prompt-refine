@@ -20,7 +20,7 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
     "finnff/nvim-prompt-refine",
     config = function()
         require("prompt-refine").setup({
-            cli_cmd = { "gemini", "--quiet" },
+            cli_cmd = { "gemini", "-o", "text" },
         })
     end,
 }
@@ -37,7 +37,7 @@ git clone https://github.com/finnff/nvim-prompt-refine ~/.config/nvim/pack/vendo
 ```lua
 require("prompt-refine").setup({
     -- The CLI command and arguments (array format)
-    cli_cmd = { "gemini", "--quiet" },
+    cli_cmd = { "gemini", "-o", "text" },
 
     -- Whether to pass input via stdin (default: true)
     -- Set to false for CLIs that use command-line arguments (e.g., claude -p "...")
@@ -50,6 +50,11 @@ require("prompt-refine").setup({
     -- Defaults to built-in meta-prompts if not specified
     -- meta_prompt_path = "~/.config/prompt-refine/meta.txt",
     -- meta_prompt_teams_path = "~/.config/prompt-refine/teams.txt",
+
+    -- Change to safe directory before running CLI (default: true)
+    -- Prevents workspace scanning by CLIs like gemini that can cause timeouts
+    -- Set to false if your CLI needs access to the current working directory
+    safe_cwd = true,
 })
 ```
 
@@ -57,9 +62,11 @@ require("prompt-refine").setup({
 
 **Gemini** (recommended):
 ```lua
-cli_cmd = { "gemini", "--quiet" }
+cli_cmd = { "gemini", "-o", "text" }
 use_stdin = true
+safe_cwd = true  -- Important: prevents gemini from scanning your working directory
 ```
+> **Note**: The `gemini` CLI scans the current directory for context, which can cause timeouts and permission warnings in directories like `/tmp`. Set `safe_cwd = true` (default) to run from a safe location.
 
 **Claude Code** (doesn't read stdin):
 ```lua
@@ -69,13 +76,13 @@ use_stdin = false  -- Claude requires prompt as argument
 
 **OpenAI Codex**:
 ```lua
-cli_cmd = { "codex", "exec", "-" }
+cli_cmd = { "codex", "exec", "-", "--skip-git-repo-check" }
 use_stdin = true
 ```
 
 **Custom with flags**:
 ```lua
-cli_cmd = { "llm", "run", "--model", "gpt-4", "--quiet" }
+cli_cmd = { "llm", "run", "--model", "gpt-4" }
 use_stdin = true
 ```
 
