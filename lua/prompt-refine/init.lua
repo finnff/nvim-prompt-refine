@@ -2,6 +2,7 @@
 ---@field cli_cmd? string The CLI executable to call
 ---@field meta_prompt_path? string Path to the standard meta prompt file
 ---@field meta_prompt_teams_path? string Path to the teams meta prompt file
+---@field timeout? integer Timeout in milliseconds (default: 60000 = 60 seconds)
 
 local M = {}
 
@@ -18,6 +19,7 @@ local defaults = {
     cli_cmd = "gemini",
     meta_prompt_path = plugin_root() .. "/meta-prompts/default.txt",
     meta_prompt_teams_path = plugin_root() .. "/meta-prompts/teams.txt",
+    timeout = 60000,  -- 60 seconds
 }
 
 ---Current configuration (merged with defaults)
@@ -74,19 +76,26 @@ local function refine_prompt(meta_prompt_path)
     local separator = "\n\n--- PROMPT TO REFINE ---\n\n"
     local combined_input = meta_prompt .. separator .. buffer_content
 
-    -- Show notification that refinement is in progress
-    vim.notify("PromptRefine: Processing...", vim.log.levels.INFO)
+    -- Show detailed notification about what's happening
+    local input_size = #combined_input
+    vim.notify(string.format("PromptRefine: Calling '%s' with %d bytes of input...", config.cli_cmd, input_size), vim.log.levels.INFO)
 
     -- Run CLI asynchronously
-    vim.system({ config.cli_cmd }, {
+    local start_time = vim.loop.now()
+    local handle = vim.system({ config.cli_cmd }, {
         stdin = combined_input,
         text = true,
     }, function(result)
         vim.schedule(function()
+            local elapsed = vim.loop.now() - start_time
             if result.code ~= 0 then
-                vim.notify("PromptRefine: CLI failed with code " .. result.code .. "\n" .. (result.stderr or "unknown error"), vim.log.levels.ERROR)
+                vim.notify(string.format("PromptRefine: CLI failed (code %d) after %dms\nstderr: %s",
+                    result.code, elapsed, result.stderr or "none"), vim.log.levels.ERROR)
                 return
             end
+
+            local stdout_size = result.stdout and #result.stdout or 0
+            vim.notify(string.format("PromptRefine: Got %d bytes of output in %dms", stdout_size, elapsed), vim.log.levels.INFO)
 
             -- Strip markdown code blocks from output
             local refined_content = strip_markdown_blocks(result.stdout or "")
@@ -100,7 +109,22 @@ local function refine_prompt(meta_prompt_path)
             -- Save the file again
             vim.cmd("write")
 
-            vim.notify("PromptRefine: Complete!", vim.log.levels.INFO)
+            vim.notify(string.format("PromptRefine: Complete! Replaced buffer with %d lines in %dms", #new_lines, elapsed), vim.log.levels.INFO)
+        end)
+    end)
+
+    -- Set up timeout to kill the process if it takes too long
+    local timer = vim.loop.new_timer()
+    timer:start(config.timeout, 0, function()
+        if handle:is_killed() then
+            return
+        end
+        handle:kill(9)  -- SIGKILL
+        timer:close()
+        vim.schedule(function()
+            local elapsed = vim.loop.now() - start_time
+            vim.notify(string.format("PromptRefine: Timeout after %dms (limit: %dms). CLI process killed.",
+                elapsed, config.timeout), vim.log.levels.ERROR)
         end)
     end)
 end
