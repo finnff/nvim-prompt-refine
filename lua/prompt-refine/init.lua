@@ -1,7 +1,7 @@
 ---@class PromptRefineConfig
----@field cli_cmd string The CLI executable to call
----@field meta_prompt_path string Path to the standard meta prompt file
----@field meta_prompt_teams_path string Path to the teams meta prompt file
+---@field cli_cmd? string The CLI executable to call
+---@field meta_prompt_path? string Path to the standard meta prompt file
+---@field meta_prompt_teams_path? string Path to the teams meta prompt file
 
 local M = {}
 
@@ -82,24 +82,26 @@ local function refine_prompt(meta_prompt_path)
         stdin = combined_input,
         text = true,
     }, function(result)
-        if result.code ~= 0 then
-            vim.notify("PromptRefine: CLI failed with code " .. result.code .. "\n" .. (result.stderr or "unknown error"), vim.log.levels.ERROR)
-            return
-        end
+        vim.schedule(function()
+            if result.code ~= 0 then
+                vim.notify("PromptRefine: CLI failed with code " .. result.code .. "\n" .. (result.stderr or "unknown error"), vim.log.levels.ERROR)
+                return
+            end
 
-        -- Strip markdown code blocks from output
-        local refined_content = strip_markdown_blocks(result.stdout or "")
+            -- Strip markdown code blocks from output
+            local refined_content = strip_markdown_blocks(result.stdout or "")
 
-        -- Split into lines
-        local new_lines = vim.split(refined_content, "\n", { trimempty = false })
+            -- Split into lines
+            local new_lines = vim.split(refined_content, "\n", { trimempty = false })
 
-        -- Replace entire buffer content
-        vim.api.nvim_buf_set_lines(bufnr, 0, -1, true, new_lines)
+            -- Replace entire buffer content
+            vim.api.nvim_buf_set_lines(bufnr, 0, -1, true, new_lines)
 
-        -- Save the file again
-        vim.cmd("write")
+            -- Save the file again
+            vim.cmd("write")
 
-        vim.notify("PromptRefine: Complete!", vim.log.levels.INFO)
+            vim.notify("PromptRefine: Complete!", vim.log.levels.INFO)
+        end)
     end)
 end
 
