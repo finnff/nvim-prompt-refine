@@ -6,6 +6,7 @@
 ---@field meta_prompt_teams_path? string Path to the teams meta prompt file
 ---@field timeout? integer Timeout in milliseconds (default: 60000 = 60 seconds)
 ---@field safe_cwd? boolean Run CLI in an empty temp directory to prevent workspace scanning (default: true)
+---@field save_dir? string Directory to save original and refined prompts with timestamped filenames (optional)
 
 local M = {}
 
@@ -26,6 +27,7 @@ local defaults = {
     meta_prompt_teams_path = plugin_root() .. "/meta-prompts/teams.txt",
     timeout = 60000,  -- 60 seconds
     safe_cwd = true,  -- Run CLI in empty temp dir to prevent workspace scanning
+    save_dir = nil,  -- Optional: directory to auto-save original and refined prompts
 }
 
 ---Current configuration (merged with defaults)
@@ -79,6 +81,26 @@ local function read_file(filepath)
     local content = file:read("*all")
     file:close()
     return content
+end
+
+---Save original and refined prompts to save_dir with timestamped filenames
+---@param original string The original prompt content
+---@param refined string The refined prompt content
+local function save_prompt_files(original, refined)
+    if not config.save_dir then return end
+    vim.fn.mkdir(config.save_dir, "p")
+    local timestamp = os.date("%Y%m%d_%H%M%S")
+    local orig_path = config.save_dir .. "/" .. timestamp .. "_original.md"
+    local refined_path = config.save_dir .. "/" .. timestamp .. "_refined.md"
+    for _, pair in ipairs({ { orig_path, original }, { refined_path, refined } }) do
+        local f, err = io.open(pair[1], "w")
+        if f then
+            f:write(pair[2])
+            f:close()
+        else
+            vim.notify("PromptRefine: Failed to write " .. pair[1] .. ": " .. (err or "unknown"), vim.log.levels.WARN)
+        end
+    end
 end
 
 ---Refine the current buffer using the specified meta prompt
@@ -162,6 +184,9 @@ local function refine_prompt(meta_prompt_path)
 
             -- Strip markdown code blocks from output
             local refined_content = strip_markdown_blocks(result.stdout or "")
+
+            -- Save original and refined prompts if save_dir is configured
+            save_prompt_files(buffer_content, refined_content)
 
             -- Split into lines
             local new_lines = vim.split(refined_content, "\n", { trimempty = false })

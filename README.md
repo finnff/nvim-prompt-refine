@@ -60,6 +60,10 @@ require("prompt-refine").setup({
     -- Prevents CLIs like Gemini from scanning the workspace on startup
     -- Set to false if your CLI needs access to the current working directory
     safe_cwd = true,
+
+    -- Optional: Directory to auto-save original and refined prompts (default: nil = disabled)
+    -- When set, saves timestamped files: 20260316_093455_original.md and 20260316_093455_refined.md
+    -- save_dir = "~/prompts",
 })
 ```
 
